@@ -27,6 +27,6 @@ Thumbs.db
 CLAUDE.md
 .claude/
 
-# Experiment raw output (can be large / regenerated) — keep the folder, ignore contents
-experimentos/resultados/*
-!experimentos/resultados/.gitkeep
+# Repo is API code + README only — planning and experiment work stay local
+planejamento/
+experimentos/
