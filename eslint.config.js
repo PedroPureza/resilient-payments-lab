@@ -1,20 +1,11 @@
-// @ts-check
-const eslint = require("@eslint/js");
-const tseslint = require("typescript-eslint");
-const eslintConfigPrettier = require("eslint-config-prettier");
-const globals = require("globals");
+import eslint from "@eslint/js";
+import tseslint from "typescript-eslint";
+import eslintConfigPrettier from "eslint-config-prettier";
+import globals from "globals";
 
-module.exports = tseslint.config(
+export default tseslint.config(
   {
     ignores: ["dist/**", "node_modules/**"],
-  },
-  {
-    // Arquivos de config do projeto (este arquivo, etc.) rodam em CommonJS puro no Node.
-    files: ["*.js"],
-    languageOptions: {
-      sourceType: "commonjs",
-      globals: globals.node,
-    },
   },
   {
     files: ["src/**/*.ts", "test/**/*.ts"],

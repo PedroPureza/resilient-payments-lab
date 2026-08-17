@@ -4,7 +4,7 @@
   "private": true,
   "description": "Simulador de backend de processamento de pagamentos com idempotencia, filas e retry (TCC - UNISINOS)",
   "license": "UNLICENSED",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "dev": "tsx watch src/api/server.ts",
     "build": "tsc",
