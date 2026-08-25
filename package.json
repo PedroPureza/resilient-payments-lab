@@ -11,6 +11,8 @@
     "start": "node dist/api/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:migrate": "tsx src/db/migrate.ts up",
+    "db:migrate:down": "tsx src/db/migrate.ts down",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write ."

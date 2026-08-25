@@ -16,18 +16,20 @@ distribuídos.
 
 ## Status atual
 
-*(Última atualização: 15/08/2026)*
+_(Última atualização: 24/08/2026)_
 
-**Fase 0 (setup do ambiente) concluída.** `docker compose up` sobe PostgreSQL +
-RabbitMQ (management UI em `:15672`); projeto Node + TypeScript inicial com
-Express, Kysely (driver Postgres), Vitest e `pino` configurados; endpoint
-`GET /health` funcionando e coberto por teste de integração.
+**Fase 1 (modelagem de dados) concluída.** Migrations criadas e aplicadas para
+as três tabelas centrais — `payments`, `idempotency_keys`, `payment_events` —
+com as constraints que sustentam o mecanismo de idempotência (`PRIMARY KEY` em
+`idempotency_keys.key`, `FOREIGN KEY`s para `payments`, `CHECK` nos campos de
+status). Tipos do Kysely (`src/db/types.ts`) espelham o schema. Teste
+automatizado prova a constraint `UNIQUE` sob duplicidade de chave.
 
-Ainda sem tabelas/migrations, sem fila conectada e sem lógica de negócio —
-isso começa na Fase 1.
+Ainda sem API de pagamentos, sem fila conectada e sem lógica de negócio — isso
+começa na Fase 2.
 
-**Próximo passo:** Fase 1 — modelagem de dados (migrations `payments`,
-`idempotency_keys`, `payment_events`).
+**Próximo passo:** Fase 2 — API core síncrona (`POST /payments` e
+`GET /payments/:id`, sem fila/idempotência ainda).
 
 ## Como rodar
 
@@ -37,6 +39,7 @@ Pré-requisitos: Docker Desktop, Node.js 20+.
 cp .env.example .env
 docker compose up -d      # sobe Postgres + RabbitMQ
 npm install
+npm run db:migrate         # aplica as migrations no banco
 npm run dev                # API em http://localhost:3000 (GET /health)
 npm test                   # roda a suíte de testes (Vitest)
 ```
