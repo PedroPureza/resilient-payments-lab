@@ -16,20 +16,25 @@ distribuídos.
 
 ## Status atual
 
-_(Última atualização: 24/08/2026)_
+_(Última atualização: 29/08/2026)_
 
-**Fase 1 (modelagem de dados) concluída.** Migrations criadas e aplicadas para
-as três tabelas centrais — `payments`, `idempotency_keys`, `payment_events` —
-com as constraints que sustentam o mecanismo de idempotência (`PRIMARY KEY` em
-`idempotency_keys.key`, `FOREIGN KEY`s para `payments`, `CHECK` nos campos de
-status). Tipos do Kysely (`src/db/types.ts`) espelham o schema. Teste
-automatizado prova a constraint `UNIQUE` sob duplicidade de chave.
+**Fase 2 (API core síncrona) concluída.** `POST /payments` e
+`GET /payments/:id` funcionando de ponta a ponta, de forma totalmente
+síncrona — um pagamento é criado e já marcado `APPROVED` na mesma requisição
+(sem fila, sem idempotência ainda — isso vem nas Fases 3 e 4). Camadas
+`routes` → `controllers` → `services` (`PaymentService`) →
+`repositories` (`PaymentRepository`) seguindo `planejamento/01-arquitetura.md`.
+Validação de entrada (`amount`, `currency`, formato de `id`) e tratamento de
+erro centralizado (`error-handler.middleware.ts`) devolvendo `400`/`404`
+apropriados. Testes de unidade do `PaymentService` (validação) e teste de
+integração do endpoint (contra Postgres real) cobrindo os casos de sucesso e
+erro. Ver `.claude/notes/fase-2.md` para o raciocínio completo, incluindo uma
+nota sobre divisão de trabalho diferente do padrão Híbrido do `CLAUDE.md` para
+esta fase específica.
 
-Ainda sem API de pagamentos, sem fila conectada e sem lógica de negócio — isso
-começa na Fase 2.
-
-**Próximo passo:** Fase 2 — API core síncrona (`POST /payments` e
-`GET /payments/:id`, sem fila/idempotência ainda).
+**Próximo passo:** Fase 3 — filas e processamento assíncrono (`POST /payments`
+passa a responder `202 Accepted` com status `PENDING`, publica na fila
+`payments.process`; um worker separado consome e atualiza para `APPROVED`).
 
 ## Como rodar
 
