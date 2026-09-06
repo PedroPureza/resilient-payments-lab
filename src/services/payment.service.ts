@@ -1,4 +1,7 @@
-import { findPaymentById, insertApprovedPayment } from "../repositories/payment.repository.js";
+import { getChannel } from "../queue/connection.js";
+import { publishToQueue } from "../queue/publisher.js";
+import { assertTopology, PAYMENTS_PROCESS_QUEUE } from "../queue/topology.js";
+import { findPaymentById, insertPendingPayment } from "../repositories/payment.repository.js";
 import { NotFoundError, ValidationError } from "../shared/errors.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,7 +32,11 @@ function parseCurrency(currency: unknown): string {
 export async function createPayment(request: CreatePaymentRequest) {
   const amount = parseAmount(request.amount);
   const currency = parseCurrency(request.currency);
-  return insertApprovedPayment({ amount, currency });
+  const payment = await insertPendingPayment({ amount, currency });
+  const channel = await getChannel();
+  await assertTopology(channel);
+  publishToQueue(channel, PAYMENTS_PROCESS_QUEUE, { paymentId: payment.id });
+  return payment;
 }
 
 export async function getPaymentById(id: string) {

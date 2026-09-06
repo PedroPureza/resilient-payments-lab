@@ -1,17 +1,27 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { app } from "../src/api/server.js";
 import { db } from "../src/db/connection.js";
+import { getChannel } from "../src/queue/connection.js";
+import { assertTopology, PAYMENTS_PROCESS_QUEUE } from "../src/queue/topology.js";
+import { processPayment } from "../src/worker/payment-processor.js";
 
 describe("Payments API", () => {
   const paymentIds: string[] = [];
+
+  beforeAll(async () => {
+    const channel = await getChannel();
+    await assertTopology(channel);
+  });
 
   afterEach(async () => {
     if (paymentIds.length > 0) {
       await db.deleteFrom("payments").where("id", "in", paymentIds).execute();
       paymentIds.length = 0;
     }
+    const channel = await getChannel();
+    await channel.purgeQueue(PAYMENTS_PROCESS_QUEUE);
   });
 
   afterAll(async () => {
@@ -19,18 +29,35 @@ describe("Payments API", () => {
   });
 
   describe("POST /payments", () => {
-    it("creates a payment already APPROVED and returns 201", async () => {
+    it("creates a payment as PENDING, publishes it, and processPayment approves it", async () => {
       const res = await request(app).post("/payments").send({ amount: "42.50", currency: "BRL" });
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(202);
       expect(res.body).toMatchObject({
         amount: "42.50",
         currency: "BRL",
-        status: "APPROVED",
+        status: "PENDING",
         attempts: 0,
       });
       expect(res.body.id).toBeTruthy();
       paymentIds.push(res.body.id);
+
+      const channel = await getChannel();
+      const message = await new Promise((resolve) => {
+        channel.consume(PAYMENTS_PROCESS_QUEUE, (msg) => {
+          if (!msg) {
+            return;
+          }
+          channel.ack(msg);
+          resolve(JSON.parse(msg.content.toString()));
+        });
+      });
+      expect(message).toEqual({ paymentId: res.body.id });
+
+      await processPayment(message);
+
+      const approved = await request(app).get(`/payments/${res.body.id}`);
+      expect(approved.body.status).toBe("APPROVED");
     });
 
     it("rejects an invalid amount with 400", async () => {

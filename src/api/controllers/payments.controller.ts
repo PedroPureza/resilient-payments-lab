@@ -3,7 +3,7 @@ import { createPayment, getPaymentById } from "../../services/payment.service.js
 
 export async function postPayment(req: Request, res: Response): Promise<void> {
   const payment = await createPayment(req.body ?? {});
-  res.status(201).json(payment);
+  res.status(202).json(payment);
 }
 
 export async function getPayment(req: Request, res: Response): Promise<void> {

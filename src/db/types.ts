@@ -6,11 +6,13 @@ export interface Database {
   payment_events: PaymentEventsTable;
 }
 
+export type PaymentStatus = "PENDING" | "APPROVED" | "FAILED";
+
 export interface PaymentsTable {
   id: Generated<string>;
   amount: string;
   currency: string;
-  status: Generated<"PENDING" | "APPROVED" | "FAILED">;
+  status: Generated<PaymentStatus>;
   attempts: Generated<number>;
   created_at: Generated<Date>;
   updated_at: Generated<Date>;

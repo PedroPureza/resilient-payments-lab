@@ -14,37 +14,48 @@ distribuídos.
 - RabbitMQ
 - Docker Compose
 
-## Status atual
-
-_(Última atualização: 29/08/2026)_
-
-**Fase 2 (API core síncrona) concluída.** `POST /payments` e
-`GET /payments/:id` funcionando de ponta a ponta, de forma totalmente
-síncrona — um pagamento é criado e já marcado `APPROVED` na mesma requisição
-(sem fila, sem idempotência ainda — isso vem nas Fases 3 e 4). Camadas
-`routes` → `controllers` → `services` (`PaymentService`) →
-`repositories` (`PaymentRepository`) seguindo `planejamento/01-arquitetura.md`.
-Validação de entrada (`amount`, `currency`, formato de `id`) e tratamento de
-erro centralizado (`error-handler.middleware.ts`) devolvendo `400`/`404`
-apropriados. Testes de unidade do `PaymentService` (validação) e teste de
-integração do endpoint (contra Postgres real) cobrindo os casos de sucesso e
-erro. Ver `.claude/notes/fase-2.md` para o raciocínio completo, incluindo uma
-nota sobre divisão de trabalho diferente do padrão Híbrido do `CLAUDE.md` para
-esta fase específica.
-
-**Próximo passo:** Fase 3 — filas e processamento assíncrono (`POST /payments`
-passa a responder `202 Accepted` com status `PENDING`, publica na fila
-`payments.process`; um worker separado consome e atualiza para `APPROVED`).
-
 ## Como rodar
 
 Pré-requisitos: Docker Desktop, Node.js 20+.
 
+Primeira vez:
+
 ```bash
 cp .env.example .env
-docker compose up -d      # sobe Postgres + RabbitMQ
 npm install
+npm run lab:up              # sobe containers + migrations + API (ver abaixo)
+```
+
+Nas vezes seguintes, um único comando reinicia os containers (sem apagar os
+dados do Postgres), aplica migrations pendentes e sobe a API:
+
+```bash
+npm run lab:up              # API em http://localhost:3000 (GET /health)
+```
+
+Passo a passo manual equivalente, caso precise rodar cada parte à parte:
+
+```bash
+docker compose up -d       # sobe Postgres + RabbitMQ
 npm run db:migrate         # aplica as migrations no banco
 npm run dev                # API em http://localhost:3000 (GET /health)
+```
+
+```bash
 npm test                   # roda a suíte de testes (Vitest)
+```
+
+## Testando com Postman
+
+Com a API no ar (`npm run lab:up`), importe
+[`postman/payment-labs.postman_collection.json`](postman/payment-labs.postman_collection.json)
+no Postman: cobre o health check, criação de pagamento (caso de sucesso e os
+casos de validação de `amount`/`currency`) e consulta por `id` (sucesso, `404`
+e `id` malformado). A variável `paymentId` é preenchida automaticamente pela
+request "Create Payment" para as demais requests reaproveitarem.
+
+Também roda via CLI (útil pra checar rápido sem abrir o Postman):
+
+```bash
+npx newman run postman/payment-labs.postman_collection.json
 ```
