@@ -21,7 +21,7 @@ export interface PaymentsTable {
 export interface IdempotencyKeysTable {
   key: string;
   request_hash: string;
-  payment_id: string;
+  payment_id: string | null;
   status: Generated<"IN_PROGRESS" | "COMPLETED">;
   cached_response: unknown;
   expires_at: Date;

@@ -11,3 +11,17 @@ export class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+export class IdempotencyKeyReusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IdempotencyKeyReusedError";
+  }
+}
+
+export class IdempotencyKeyInProgressError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IdempotencyKeyInProgressError";
+  }
+}

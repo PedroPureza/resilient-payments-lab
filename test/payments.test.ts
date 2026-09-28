@@ -9,6 +9,7 @@ import { processPayment } from "../src/worker/payment-processor.js";
 
 describe("Payments API", () => {
   const paymentIds: string[] = [];
+  const keys: string[] = [];
 
   beforeAll(async () => {
     const channel = await getChannel();
@@ -16,6 +17,10 @@ describe("Payments API", () => {
   });
 
   afterEach(async () => {
+    if (keys.length > 0) {
+      await db.deleteFrom("idempotency_keys").where("key", "in", keys).execute();
+      keys.length = 0;
+    }
     if (paymentIds.length > 0) {
       await db.deleteFrom("payments").where("id", "in", paymentIds).execute();
       paymentIds.length = 0;
@@ -30,7 +35,12 @@ describe("Payments API", () => {
 
   describe("POST /payments", () => {
     it("creates a payment as PENDING, publishes it, and processPayment approves it", async () => {
-      const res = await request(app).post("/payments").send({ amount: "42.50", currency: "BRL" });
+      const key = randomUUID();
+      keys.push(key);
+      const res = await request(app)
+        .post("/payments")
+        .set("Idempotency-Key", key)
+        .send({ amount: "42.50", currency: "BRL" });
 
       expect(res.status).toBe(202);
       expect(res.body).toMatchObject({
@@ -61,13 +71,19 @@ describe("Payments API", () => {
     });
 
     it("rejects an invalid amount with 400", async () => {
-      const res = await request(app).post("/payments").send({ amount: "free", currency: "BRL" });
+      const res = await request(app)
+        .post("/payments")
+        .set("Idempotency-Key", randomUUID())
+        .send({ amount: "free", currency: "BRL" });
 
       expect(res.status).toBe(400);
     });
 
     it("rejects an invalid currency with 400", async () => {
-      const res = await request(app).post("/payments").send({ amount: "10.00", currency: "reais" });
+      const res = await request(app)
+        .post("/payments")
+        .set("Idempotency-Key", randomUUID())
+        .send({ amount: "10.00", currency: "reais" });
 
       expect(res.status).toBe(400);
     });
@@ -75,8 +91,11 @@ describe("Payments API", () => {
 
   describe("GET /payments/:id", () => {
     it("returns the payment created previously", async () => {
+      const key = randomUUID();
+      keys.push(key);
       const created = await request(app)
         .post("/payments")
+        .set("Idempotency-Key", key)
         .send({ amount: "10.00", currency: "USD" });
       paymentIds.push(created.body.id);
 
