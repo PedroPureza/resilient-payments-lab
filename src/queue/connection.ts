@@ -2,20 +2,22 @@ import amqp, { type Channel } from "amqplib";
 import { env } from "../shared/env.js";
 
 let connection: Awaited<ReturnType<typeof amqp.connect>> | undefined;
-let channel: Channel | undefined;
+let channelPromise: Promise<Channel> | undefined;
 
-export async function getChannel(): Promise<Channel> {
-  if (channel) {
-    return channel;
-  }
-  connection = await amqp.connect(env.rabbitmqUrl);
-  channel = await connection.createChannel();
-  return channel;
+async function openChannel(): Promise<Channel> {
+  connection = await amqp.connect(env.rabbitmqUrl, { noDelay: true });
+  return connection.createChannel();
+}
+
+export function getChannel(): Promise<Channel> {
+  channelPromise ??= openChannel();
+  return channelPromise;
 }
 
 export async function closeConnection(): Promise<void> {
+  const channel = await channelPromise;
   await channel?.close();
   await connection?.close();
-  channel = undefined;
+  channelPromise = undefined;
   connection = undefined;
 }

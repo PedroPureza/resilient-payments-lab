@@ -18,6 +18,16 @@ export function findPaymentById(id: string) {
   return db.selectFrom("payments").selectAll().where("id", "=", id).executeTakeFirst();
 }
 
+export function startPendingPaymentAttempt(id: string) {
+  return db
+    .updateTable("payments")
+    .set((eb) => ({ attempts: eb("attempts", "+", 1), updated_at: new Date() }))
+    .where("id", "=", id)
+    .where("status", "=", "PENDING")
+    .returningAll()
+    .executeTakeFirst();
+}
+
 export function updatePaymentStatus(id: string, status: PaymentStatus) {
   return db
     .updateTable("payments")

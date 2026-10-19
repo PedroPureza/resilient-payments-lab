@@ -21,6 +21,7 @@ describe("Idempotency (POST /payments)", () => {
       keys.length = 0;
     }
     if (paymentIds.length > 0) {
+      await db.deleteFrom("payment_events").where("payment_id", "in", paymentIds).execute();
       await db.deleteFrom("payments").where("id", "in", paymentIds).execute();
       paymentIds.length = 0;
     }

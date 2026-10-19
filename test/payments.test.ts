@@ -5,7 +5,7 @@ import { app } from "../src/api/server.js";
 import { db } from "../src/db/connection.js";
 import { getChannel } from "../src/queue/connection.js";
 import { assertTopology, PAYMENTS_PROCESS_QUEUE } from "../src/queue/topology.js";
-import { processPayment } from "../src/worker/payment-processor.js";
+import { type PaymentProcessMessage, processPayment } from "../src/worker/payment-processor.js";
 
 describe("Payments API", () => {
   const paymentIds: string[] = [];
@@ -22,6 +22,7 @@ describe("Payments API", () => {
       keys.length = 0;
     }
     if (paymentIds.length > 0) {
+      await db.deleteFrom("payment_events").where("payment_id", "in", paymentIds).execute();
       await db.deleteFrom("payments").where("id", "in", paymentIds).execute();
       paymentIds.length = 0;
     }
@@ -64,7 +65,11 @@ describe("Payments API", () => {
       });
       expect(message).toEqual({ paymentId: res.body.id });
 
-      await processPayment(message);
+      await processPayment(message as PaymentProcessMessage, {
+        channel,
+        chaos: { failureRate: 0, modes: ["exception"], timeoutMs: 0 },
+        retryPolicy: { maxAttempts: 1, baseDelayMs: 1000 },
+      });
 
       const approved = await request(app).get(`/payments/${res.body.id}`);
       expect(approved.body.status).toBe("APPROVED");

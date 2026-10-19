@@ -1,6 +1,7 @@
 import { getChannel } from "../queue/connection.js";
 import { publishToQueue } from "../queue/publisher.js";
 import { assertTopology, PAYMENTS_PROCESS_QUEUE } from "../queue/topology.js";
+import { recordPaymentEvent } from "../repositories/payment-event.repository.js";
 import { findPaymentById, insertPendingPayment } from "../repositories/payment.repository.js";
 import { NotFoundError, ValidationError } from "../shared/errors.js";
 
@@ -33,6 +34,7 @@ export async function createPayment(request: CreatePaymentRequest) {
   const amount = parseAmount(request.amount);
   const currency = parseCurrency(request.currency);
   const payment = await insertPendingPayment({ amount, currency });
+  await recordPaymentEvent(payment.id, "CREATED", { amount, currency });
   const channel = await getChannel();
   await assertTopology(channel);
   publishToQueue(channel, PAYMENTS_PROCESS_QUEUE, { paymentId: payment.id });
