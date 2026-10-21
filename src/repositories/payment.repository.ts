@@ -1,13 +1,14 @@
+import type { Kysely } from "kysely";
 import { db } from "../db/connection.js";
-import type { PaymentStatus } from "../db/types.js";
+import type { Database, PaymentStatus } from "../db/types.js";
 
 export interface InsertPaymentInput {
   amount: string;
   currency: string;
 }
 
-export function insertPendingPayment(input: InsertPaymentInput) {
-  return db
+export function insertPendingPayment(input: InsertPaymentInput, executor: Kysely<Database> = db) {
+  return executor
     .insertInto("payments")
     .values({ amount: input.amount, currency: input.currency, status: "PENDING" })
     .returningAll()

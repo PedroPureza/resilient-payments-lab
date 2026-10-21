@@ -35,6 +35,63 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build: .
+    command: ["node", "dist/db/migrate.js", "up"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-payments}:${POSTGRES_PASSWORD:-payments}@postgres:5432/${POSTGRES_DB:-payments}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    container_name: payments-api
+    restart: unless-stopped
+    command: ["node", "dist/api/server.js"]
+    environment:
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://${POSTGRES_USER:-payments}:${POSTGRES_PASSWORD:-payments}@postgres:5432/${POSTGRES_DB:-payments}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-payments}:${RABBITMQ_PASSWORD:-payments}@rabbitmq:5672
+      IDEMPOTENCY_ENABLED: ${IDEMPOTENCY_ENABLED:-true}
+      IDEMPOTENCY_LOCK_TIMEOUT_MS: ${IDEMPOTENCY_LOCK_TIMEOUT_MS:-30000}
+      IDEMPOTENCY_KEY_TTL_MS: ${IDEMPOTENCY_KEY_TTL_MS:-86400000}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build: .
+    container_name: payments-worker
+    restart: unless-stopped
+    command: ["node", "dist/worker/consumer.js"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://${POSTGRES_USER:-payments}:${POSTGRES_PASSWORD:-payments}@postgres:5432/${POSTGRES_DB:-payments}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-payments}:${RABBITMQ_PASSWORD:-payments}@rabbitmq:5672
+      FAILURE_RATE: ${FAILURE_RATE:-0}
+      FAILURE_MODES: ${FAILURE_MODES:-exception,timeout,unavailable}
+      CHAOS_TIMEOUT_MS: ${CHAOS_TIMEOUT_MS:-300}
+      MAX_ATTEMPTS: ${MAX_ATTEMPTS:-4}
+      RETRY_BASE_DELAY_MS: ${RETRY_BASE_DELAY_MS:-1000}
+      WORKER_PREFETCH: ${WORKER_PREFETCH:-10}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   rabbitmq_data:

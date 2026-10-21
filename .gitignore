@@ -27,6 +27,6 @@ Thumbs.db
 CLAUDE.md
 .claude/
 
-# Repo is API code + README only — planning and experiment work stay local
+# Planning docs and raw experiment results stay local
 planejamento/
-experimentos/
+experimentos/resultados/

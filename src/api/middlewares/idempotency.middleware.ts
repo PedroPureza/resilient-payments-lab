@@ -58,14 +58,21 @@ export async function idempotencyMiddleware(
         responseBody = jsonBody;
         return originalJson(jsonBody);
       };
+      const { lockToken } = result;
       res.on("finish", () => {
         if (res.statusCode < 300) {
           const paymentId = (responseBody as { id: string }).id;
-          completeIdempotencyKey(key, paymentId, responseBody).catch((err: unknown) => {
-            logger.error(err, `failed to complete idempotency key ${key}`);
-          });
+          completeIdempotencyKey(key, lockToken, paymentId, responseBody)
+            .then((completed) => {
+              if (!completed) {
+                logger.warn(`idempotency key ${key} expired and was taken over before completing`);
+              }
+            })
+            .catch((err: unknown) => {
+              logger.error(err, `failed to complete idempotency key ${key}`);
+            });
         } else {
-          releaseIdempotencyKey(key).catch((err: unknown) => {
+          releaseIdempotencyKey(key, lockToken).catch((err: unknown) => {
             logger.error(err, `failed to release idempotency key ${key}`);
           });
         }

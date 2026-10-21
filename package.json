@@ -8,13 +8,15 @@
   "scripts": {
     "dev": "tsx watch src/api/server.ts",
     "worker": "tsx watch src/worker/consumer.ts",
-    "lab:up": "docker compose down && docker compose up -d --wait && npm run db:migrate && npm run dev",
+    "lab:up": "docker compose down && docker compose up -d --wait postgres rabbitmq && npm run db:migrate && npm run dev",
     "build": "tsc",
     "start": "node dist/api/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx src/db/migrate.ts up",
     "db:migrate:down": "tsx src/db/migrate.ts down",
+    "experiments": "tsx experimentos/scenarios/run-experiments.ts",
+    "experiments:summary": "tsx experimentos/scenarios/summarize.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write ."

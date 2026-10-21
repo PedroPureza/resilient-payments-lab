@@ -179,4 +179,32 @@ describe("Retry with backoff and dead-letter queue", () => {
     const payment = await waitForFinalStatus(paymentId);
     expect(payment.attempts).toBe(1);
   });
+
+  it("processes up to prefetch messages at the same time", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const worker = await startWorker({
+      chaos: neverFail,
+      retryPolicy: fastRetryPolicy,
+      prefetch: 5,
+      simulate: async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        inFlight--;
+      },
+    });
+    try {
+      const ids = await Promise.all(Array.from({ length: 5 }, () => createPayment()));
+      paymentIds.push(...ids);
+
+      for (const id of ids) {
+        expect((await waitForFinalStatus(id)).status).toBe("APPROVED");
+      }
+      expect(maxInFlight).toBeGreaterThan(1);
+      expect(maxInFlight).toBeLessThanOrEqual(5);
+    } finally {
+      await worker.stop();
+    }
+  });
 });

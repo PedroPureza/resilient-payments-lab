@@ -8,7 +8,7 @@ export default tseslint.config(
     ignores: ["dist/**", "node_modules/**"],
   },
   {
-    files: ["src/**/*.ts", "test/**/*.ts"],
+    files: ["src/**/*.ts", "test/**/*.ts", "experimentos/scenarios/**/*.ts"],
     extends: [eslint.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: {
       globals: globals.node,

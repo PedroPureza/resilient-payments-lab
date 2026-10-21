@@ -1,13 +1,14 @@
 import { fileURLToPath } from "node:url";
 import type { ConsumeMessage } from "amqplib";
 import { getChannel } from "../queue/connection.js";
-import { publishToQueue } from "../queue/publisher.js";
+import { publishConfirmed } from "../queue/publisher.js";
 import {
   assertRetryQueues,
   assertTopology,
   PAYMENTS_DEAD_LETTER_QUEUE,
   PAYMENTS_PROCESS_QUEUE,
 } from "../queue/topology.js";
+import { env } from "../shared/env.js";
 import { logger } from "../shared/logger.js";
 import { type ChaosConfig, chaosConfigFromEnv } from "./chaos/failure-simulator.js";
 import { processPayment, type ProcessingDependencies } from "./payment-processor.js";
@@ -17,6 +18,7 @@ export interface WorkerOptions {
   chaos?: ChaosConfig;
   retryPolicy?: RetryPolicy;
   simulate?: ProcessingDependencies["simulate"];
+  prefetch?: number;
 }
 
 export interface RunningWorker {
@@ -34,7 +36,8 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
   };
   await assertTopology(channel);
   await assertRetryQueues(channel, retryDelays(retryPolicy));
-  await channel.prefetch(1);
+  const prefetch = options.prefetch ?? env.workerPrefetch;
+  await channel.prefetch(prefetch);
 
   async function handleMessage(msg: ConsumeMessage): Promise<void> {
     const rawContent = msg.content.toString();
@@ -44,10 +47,16 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
       logger.info({ paymentId: message.paymentId, outcome }, "payment message handled");
     } catch (err) {
       logger.error({ err }, "unexpected error processing payment message, moving it to DLQ");
-      publishToQueue(channel, PAYMENTS_DEAD_LETTER_QUEUE, {
-        rawContent,
-        lastError: err instanceof Error ? err.message : String(err),
-      });
+      try {
+        await publishConfirmed(channel, PAYMENTS_DEAD_LETTER_QUEUE, {
+          rawContent,
+          lastError: err instanceof Error ? err.message : String(err),
+        });
+      } catch (publishErr) {
+        logger.error({ err: publishErr }, "failed to move message to DLQ, requeueing it");
+        channel.nack(msg, false, true);
+        return;
+      }
     }
     channel.ack(msg);
   }
@@ -59,7 +68,7 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
   });
 
   logger.info(
-    { chaos: dependencies.chaos, retryPolicy, retryDelaysMs: retryDelays(retryPolicy) },
+    { chaos: dependencies.chaos, retryPolicy, retryDelaysMs: retryDelays(retryPolicy), prefetch },
     `Worker consumindo ${PAYMENTS_PROCESS_QUEUE}`,
   );
 
@@ -71,5 +80,16 @@ export async function startWorker(options: WorkerOptions = {}): Promise<RunningW
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  startWorker();
+  startWorker()
+    .then(async () => {
+      const channel = await getChannel();
+      channel.once("close", () => {
+        logger.error("RabbitMQ channel closed, exiting so the worker can be restarted");
+        process.exit(1);
+      });
+    })
+    .catch((err: unknown) => {
+      logger.error({ err }, "worker failed to start");
+      process.exit(1);
+    });
 }

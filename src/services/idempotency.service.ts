@@ -1,13 +1,14 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   deleteIdempotencyKey,
   findIdempotencyKeyByKey,
-  insertInProgressIdempotencyKey,
+  insertOrTakeOverExpiredIdempotencyKey,
   completeIdempotencyKey as completeIdempotencyKeyRepository,
 } from "../repositories/idempotency-key.repository.js";
+import { env } from "../shared/env.js";
 
 export type IdempotencyClaimResult =
-  | { outcome: "claimed" }
+  | { outcome: "claimed"; lockToken: string }
   | { outcome: "replay"; cachedResponse: unknown }
   | { outcome: "in_progress" }
   | { outcome: "mismatch" };
@@ -20,36 +21,47 @@ export async function claimIdempotencyKey(
   key: string,
   requestHash: string,
 ): Promise<IdempotencyClaimResult> {
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
-  try {
-    await insertInProgressIdempotencyKey({ key, requestHash, expiresAt });
-    return { outcome: "claimed" };
-  } catch (error) {
-    if ((error as { code?: string }).code === "23505") {
-      const row = await findIdempotencyKeyByKey(key);
-      if (!row) {
-        return { outcome: "in_progress" };
-      }
-      if (row.request_hash !== requestHash) {
-        return { outcome: "mismatch" };
-      }
-      if (row.status === "COMPLETED") {
-        return { outcome: "replay", cachedResponse: row.cached_response };
-      }
-      return { outcome: "in_progress" };
-    }
-    throw error;
+  const lockToken = randomUUID();
+  const claimed = await insertOrTakeOverExpiredIdempotencyKey({
+    key,
+    requestHash,
+    lockToken,
+    lockTimeoutMs: env.idempotencyLockTimeoutMs,
+  });
+  if (claimed) {
+    return { outcome: "claimed", lockToken };
   }
+
+  const row = await findIdempotencyKeyByKey(key);
+  if (!row) {
+    return { outcome: "in_progress" };
+  }
+  if (row.request_hash !== requestHash) {
+    return { outcome: "mismatch" };
+  }
+  if (row.status === "COMPLETED") {
+    return { outcome: "replay", cachedResponse: row.cached_response };
+  }
+  return { outcome: "in_progress" };
 }
 
 export async function completeIdempotencyKey(
   key: string,
+  lockToken: string,
   paymentId: string,
   response: unknown,
-): Promise<void> {
-  await completeIdempotencyKeyRepository(key, paymentId, response);
+): Promise<boolean> {
+  const result = await completeIdempotencyKeyRepository(
+    key,
+    lockToken,
+    paymentId,
+    response,
+    env.idempotencyKeyTtlMs,
+  );
+  return result.numUpdatedRows > 0n;
 }
 
-export async function releaseIdempotencyKey(key: string): Promise<void> {
-  await deleteIdempotencyKey(key);
+export async function releaseIdempotencyKey(key: string, lockToken: string): Promise<boolean> {
+  const result = await deleteIdempotencyKey(key, lockToken);
+  return result.numDeletedRows > 0n;
 }

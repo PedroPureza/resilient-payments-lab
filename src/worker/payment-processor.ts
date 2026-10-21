@@ -1,5 +1,5 @@
-import type { Channel } from "amqplib";
-import { publishToQueue } from "../queue/publisher.js";
+import type { ConfirmChannel } from "amqplib";
+import { publishConfirmed } from "../queue/publisher.js";
 import { PAYMENTS_DEAD_LETTER_QUEUE, retryQueueName } from "../queue/topology.js";
 import { recordPaymentEvent } from "../repositories/payment-event.repository.js";
 import {
@@ -20,7 +20,7 @@ export interface PaymentProcessMessage {
 export type ProcessingOutcome = "approved" | "retry_scheduled" | "moved_to_dlq" | "skipped";
 
 export interface ProcessingDependencies {
-  channel: Channel;
+  channel: ConfirmChannel;
   chaos: ChaosConfig;
   retryPolicy: RetryPolicy;
   simulate?: (config: ChaosConfig) => Promise<void>;
@@ -67,7 +67,7 @@ async function handleFailedAttempt(
 
   const decision = decideAfterFailure(dependencies.retryPolicy, attempt);
   if (decision.action === "retry") {
-    publishToQueue(dependencies.channel, retryQueueName(decision.delayMs), message);
+    await publishConfirmed(dependencies.channel, retryQueueName(decision.delayMs), message);
     await recordPaymentEvent(paymentId, "RETRY_SCHEDULED", {
       attempt,
       nextAttempt: attempt + 1,
@@ -78,7 +78,7 @@ async function handleFailedAttempt(
 
   await updatePaymentStatus(paymentId, "FAILED");
   await recordPaymentEvent(paymentId, "FAILED", { attempts: attempt, reason: failure.message });
-  publishToQueue(dependencies.channel, PAYMENTS_DEAD_LETTER_QUEUE, {
+  await publishConfirmed(dependencies.channel, PAYMENTS_DEAD_LETTER_QUEUE, {
     ...message,
     attempts: attempt,
     lastError: failure.message,
